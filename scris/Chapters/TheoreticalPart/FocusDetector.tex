@@ -1,0 +1,157 @@
+In the following it will be explained in detail the theoretical part of the Focus detector, mainly how the faces and eyes are detected and passed to the CNN (convolutional neural network), which will than learn from those photos to create a good model for detecting the attention of the driver. The above sections serves as a foundation of how a neural network works and how it learns, and a brief history of the artificial intelligence in automotive and in the overall activity of the humans. As a short recap of the sections above, the artificial intelligence played a big role in making the cars more safer. In this regard, thanks to the AI (artificial intelligence) systems that could imitate the human behaviour appeared, sensors for keeping the right lane, drowsiness and much more. Moreover, the best neural network for dealing with images and their demands are, by far, the convolutional neural network. They use the following layers: convolution (responsible for learning), max-pooling (they make a downsampling for going deeper into the image) and fully-connected (similar to the layer from a traditional ANN, they serve as a consolidation of the above layers and they give the result). So, as stated in the begging of this section the main focus is to explain in detail how the face and eyes are detected by using a common technique known as haar cascades, implemented in the OpenCv framework, by Intel. Therefore, a short history and importance of this technique will be covered in this thesis also. \par
+
+Recently, more attention was given to the Haar Cascade Classifiers (HCC) thanks to their reliability and fastness. This technique was introduced by the Viola and Jones in the early 2000s in order to detect effectively faces and landmarks of faces \cite{Viola}. This approach is based on the idea of having cascades of elementary classifiers, managed to design proper and not so computational expensive detection systems. Lienhart et al. \cite{Lienhart} in their paper explains how they improved the original haar cascade classifier by introduction new features into the pool ("rotated Haar-like" \cite{Viola}). Also, he tested how some fragile classifiers influence the achievement of the cascades \cite{Viola}. \par
+
+Another test conducted by Meynet et al. \cite{Meynet} which combined a set of parallel weak classifiers with a relatively easy HCC. The haar cascade classifier was used to easily classify non-faces images \cite{Viola}. \par
+
+When is the case to detect eyes, they are usually find on a localized face region. This technique is a bit trickier because detectors has to segregate betwixt eyes and some alternative facial looks \cite{Viola}. 
+
+A study in eye detection was by the Wang et al. \cite{Wang} where they applied filters to take care of the variations in illumination. They used Support-Vector Machine and variance filters to verify the region and extract with a very good precision the location of the eyes \cite{Viola}. Some problem arrives when trying to detect multiple features from a region of a face, like eyes, nose and mouth. The authors Wilson and Fernandez \cite{Fernandez} proposed a regionalized search. This suggestion implies the knowledge of the face structure i.e. when looking for the left eye it should be located in the upper-left, similarly for the right eye in the upper-right, for the nose shoul be in the center and the mouth in the lower side of the face. This method, known in literature as Viola-Johnes algorithm, reduces by a long margin the false positive ratio \cite{Viola}. These are the main features of the \textbf{Viola-Jones} algorithm :
+\begin{enumerate}
+    \item Integral image: in order to detect objects as quickly as possible, using calculations of Haar features, resulting in an integral image by using few operations per pixel. After the computations are done, any other Haar feature will be computed in a constant time \cite{OpenViola}.
+    \item Another important feature is having the so called "adaboost Learning" algorithm, capable of identifying and extracting only the critical features to be able to make fast and accurate classifications, discarding, at the same time, the not so important features \cite{OpenViola}.
+    \item  Lastly, cascade classifiers which focuses on objects, like a human face and ignoring the background, as seen in the Figure \ref{fig:HaarCascadeClassifier}. This technique is interested more in regions of interest (roi) that may contain any object, otherwise rejecting them. A very good approach for detection in real time \cite{OpenViola}.
+\end{enumerate}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=.8\linewidth]{Images/HaarCascadesClassifier.png}
+    \caption{Some haar cascade classifiers  \cite{OpenViola}}
+    \label{fig:HaarCascadeClassifier}
+\end{figure}
+
+\subsubsection{Face and eye detection}
+
+\textbf{Haar-like features} \newline
+
+As stated in the \cite{Lienhart}, the equation that is able to compute the Haar-like feature is show below: \cite{Haar}
+
+\begin{center}
+    \begin{equation}
+        \textit{feature} = \sum_{i \in \{1...N\}} \omega_{i} \cdot RecSum(x,y,w,h,\phi)
+    \end{equation}
+\end{center}
+
+\noindent
+Where the function \textit{RecSum(x,y,w,h,$\phi$)} \textcolor{green}{\sout{in Eq. \ref{equation} fc RecSum are doar 4 param, aici are 5 (in ec nu apare di unghiul de rotatie)}} represents the accumulation of concentration values at any specific upright or twisted rectangle in the detection area. The parameters of the function hold the coordinates (x,y), dimensions (w,h) and $\phi$ is the rotation of the rectangle \cite{Haar}, as show in the Figure \ref{fig:DetectionWindow}.
+
+As stated in \cite{Haar} in order to reduce the probability of having unlimited features, some restrictions should be applied as follows:
+\begin{itemize}
+    \item is allowed to sum pixels over at most two rectangles.
+    \item the use of weights is to satisfy the difference of the area of two rectangles and to not have the same sign (i.e. if the first area is $\omega_{1} \cdot$ Area($r_{1}$)$>$0 than $\omega_{0} \cdot$ Area($r_{0}$)= -$\omega_{1} \cdot$ Area($r_{1}$)).
+\end{itemize}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=.8\linewidth]{Images/DetectionWindow.png}
+    \caption{Samples of detection windows  \cite{Haar}}
+    \label{fig:DetectionWindow}
+\end{figure}
+
+Thus, taking into account the above restriction, the number of haar-features is 14 (show in the Figure \ref{fig:PrototypeHaarFeature}). This features can be scaled in any bidirectional direction and situated in any region of the detection window. Thus, the result of these features are calculated as the fraction between the sums of pixels from both black and white rectangles and than extended to satisfy the difference of the areas \cite{Haar}.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=.8\linewidth]{Images/PrototypeHaarFeature.png}
+    \caption{All the prototypes of Haar features \cite{Haar}}
+    \label{fig:PrototypeHaarFeature}
+\end{figure}
+
+For evaluating feature fast and accurate, there were introduced two innovative representations for an image: 
+
+\begin{itemize}
+    \item First representation is "Summed Area Table" (SAT(x,y)) \cite{Viola} used to compute the features using the values from the "upright rectangles" \cite{Haar}. Thus, every entry in the table is obtained as the accumulation of the strengths of the pixel over a upright rectangle stretching from the beginning (0,0) to a specified coordinate (x,y), being "filled" thanks to the following formula \cite{Haar}:
+        \begin{center}
+            \begin{equation} \label{eq:SAT}
+                \textit{SAT(x,y)} = \sum_{x' \leq x,y' \leq y} I(x',y')
+            \end{equation}
+        \end{center}
+    Once the table is complete, the Summed Area of that table permits the calculation of the pixel sum through any upright rectangle in just four quick visits of the equation \ref{eq:SAT} \cite{Haar}: 
+        \begin{center}
+            \begin{equation}
+                \begin{multlined}
+                    \textit{RecSum(x,y,w,h,0)} = SAT(x-1,y-1)+ \\ +SAT(x+w-1,y+h-1)- \\ -SAT(x+w-1,y-1)-SAT(x-1,y+h-1)
+                \end{multlined}
+            \end{equation}
+        \end{center}
+        
+    \item Lastly there is the "Rotated Summed Area Table" \cite{Lienhart} used to compute rotated features. Entries are filled corresponding to the following formula \cite{Haar}: 
+        \begin{center}
+            \begin{equation}
+                \textit{RSAT(x,y)} = \sum_{|x-x'| \leq y-y',y' \leq y} I(x',y')
+            \end{equation}
+        \end{center}
+    The following formula allows to compute the pixel sum of all rotated rectangle \cite{Haar}:
+        \begin{center}
+            \begin{equation}
+                \begin{multlined}
+                    \textit{RecSum(x,y,w,h,45)} = RSAT(x-h+w,y+w+h-1)+\\+RSAT(x,y-1)-RSAT(h-x,y+h-1)-\\-RSAT(x+w-1,y+w-1)
+                \end{multlined}
+            \end{equation}
+        \end{center}
+\end{itemize}
+
+\textbf{Classifier Cascade} \newline
+
+The ideal classifier would be a strong one, but there are many robust classifiers, thus making the image processing take much longer than expected. To reduce the time taken to detect, a "cascade" of classifiers will be used. Constructing smaller and capable classifiers situated on the sub-windows in the given image is a good idea to improve the efficiency of the detection. In this case the strong classifier will range from the best to the worst classifier, whereas the best classifier that will have the finest feature will be capable to deny rotation, noise and negative sub-windows. More informations (rotation, noise and negative sub-windows) are ignored by the following layers called "stages" while they gather new computations \cite{OpenViola}. \par
+
+At every stage, the Haar-like features are computed for the sub-window, after which the results are compared to a threshold, taken from the strong classifier, to check if its a face or not. When the features fulfilled the threshold condition, then the sub-window will go to the next stage from the cascade to perform the same task. If the features fails to reach the threshold in all the stages will result in rejecting the sub-window \cite{OpenViola}. \par
+
+After the face is detected and region of interest is computed using the classifiers from OpenCV (see Figure \ref{fig:FaceEyeDetection}), the eyes are detected in the following way. Firstly the distances of the eyes are computed using the following equations \cite{OpenViola}:
+
+\begin{equation} \label{eq:Hface}
+    Hface =\text{1.8 d eye}
+\end{equation}
+
+\begin{equation} \label{eq:Heye}
+    Heye =\text{0.2 h face}
+\end{equation}
+
+\begin{equation} \label{eq:Weye}
+    Weye =\text{0.225h face}
+\end{equation}
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=1.1\linewidth]{Images/FaceEyeDetection.png}
+    \caption{Example of how the detection works \cite{OpenViola}}
+    \label{fig:FaceEyeDetection}
+\end{figure}
+
+As stated in \cite{OpenViola} all detected faces have very similar length and breadth of the eyes. Therefore, an average of the width (short wavg) and distance between eyes (short davg) can be computed using the following equation:
+
+\begin{center}
+    \begin{equation} \label{eq:Average}
+        \textit{Average} = \frac{\sum_{i=1}^n xi}{n} 
+    \end{equation}
+\end{center}
+
+In the case of detecting both eyes from an image the following inequality must be true \cite{OpenViola}: 
+\begin{center}
+    \begin{equation} \label{eq:tru}
+        davg/2 < \text{distance between eyes} < 2*davg 
+    \end{equation}
+\end{center}
+
+The size of the eyes may differ, therefore for every eye the equations \ref{eq:Hface} \ref{eq:Heye} and \ref{eq:Weye} in order to obtain the with of the eyes and distance between the eyes. Also, if the inequality \ref{eq:tru} is not fulfilled than the region is not taken into account. This a security measure that eliminates maliciously detected eyes \cite{OpenViola}. \par
+
+Lastly, after the eyes were detected, all the images are transformed into arrays of pixels and passed to the neural network, which will classify the output into two section "focused" and "not\_focused". After which, the model will try to predict if the driver is focused or not, based on the prediction made. More details on implementation are discussed in the practical chapter under the implementation section.
+
+A short description of three other algorithms or approaches to face detection or recognition will be made. The first algorithm is called \textbf{Eigenface based algorithm}, which is one of the most used approaches for face detection, thanks to it simplicity and very powerful for small datasets. The \textit{Eigenfaces} represents the characteristic feature, like eyes, nose and mouth from a face. These Eigenfaces are used for classifying the existence of a face by computing the relative distance between them \cite{Review}. \par
+
+Another approach which is widely used is \textbf{Fisherface based algorithm} which handles mechanisms for extractions of features in face images. It tries to discover the direction of the projection in which, the images that belongs to distinct classes are detached maximally. It comes as a refinement of the Eigenface algorithm, performing better at dealing with lighting variations \cite{Review}.
+
+The last algorithm presented in this thesis, for face detection, would be \textbf{Active Shape Model}. Its a statistical model representing the shape of some objects as restricted by point distribution model, hence the shape of the object will be decreased to, only a set of points. This approach is used to analyze images, medical images and many more \cite{Survey}. The Active Shape Model is grouped into three categories:
+
+\begin{enumerate}
+    \item \textbf{Snakes:} this technique uses active silhouette or snakes in order to locate the head boundary. Also, using these contours, features boundaries can be constructed \cite{Survey}. 
+    \item \textbf{Deformable Templates:} are used to resolve the problem of detecting the face under bad lighting or contrast from an image. There are some predefined
+    templates, in this method, that are used to direct the detection process, being very malleable and capable of changing the size in order to match the data \cite{Survey}.
+    \item \textbf{Point Distribution Models (PDM):} represents solid and parameterized depictions of the silhouettes based on some statistics. The shape of a PDM is divided into an array of unique labeled points, where the fluctuations of them can be parameterized over a dataset which contains objects with distinct sizes and postures \cite{Survey}.
+\end{enumerate}
+
+\textcolor{green}{\sout{cred ca ar merita sa treci putin in revista si alti algoritmi de face detection (pe langa Viola-Jones). Poti vedea aici cateva recenzii:}}
+
+$http://article.nadiapub.com/IJCA/vol8_no5/7.pdf$
+
+$https://arxiv.org/pdf/1804.06655.pdf$

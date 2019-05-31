@@ -1,0 +1,318 @@
+This section is focused on the practical part of the thesis, mainly on how the focus and drowsiness detector were implemented. In what has to come, the image processing phase and the architecture of the convolutional neural network, followed by how the prediction is made (part of the focus detector), how the drowsiness detector is implemented and lastly, but not the least, how the main program works. Also, the dataset used for the neural network is "AffectNet" which contains around 1 mil images of human faces. \par
+
+\subsubsection{Focus detector} 
+
+\vspace{2ex}
+\textbf{Image processing} \par
+\vspace{2ex}
+
+This process is useful for detecting the face and the eyes in order to train the neural network model.
+
+\begin{lstlisting}
+for image_path in glob('D:/Faculta/licenta/Manually_Annotated_Images/Training/focused/*.*'):
+    image1 = cv2.imread(image_path)
+    image1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
+    face1 = face_cascade.detectMultiScale(image1, scaleFactor=1.5, minNeighbors=5)
+    roi_eyes1 = ''
+    count += 1
+    print(1, " ", count, " ", len(face1))
+
+    if len(face1) != 0:
+        for (x, y, w, h) in face1:
+            roi1 = image1[y:y + h, x:x + w]
+            eyes1 = eye_cascade.detectMultiScale(roi1)
+            for (ex, ey, ew, eh) in eyes1:
+                roi_eyes1 = roi1[ey: ey + eh, ex: ex + ew]
+                roi_eyes1 = cv2.resize(roi_eyes1, (60, 60))
+        if len(roi_eyes1) != 0:
+            image_type_1.append(preprocessing.image.img_to_array(roi_eyes1))
+    else:
+        eyes1 = eye_cascade.detectMultiScale(image1)
+        if len(eyes1) != 0:
+            for (ex, ey, ew, eh) in eyes1:
+                roi_eyes1 = image1[ey: ey + eh, ex: ex + ew]
+                roi_eyes1 = cv2.resize(roi_eyes1, (60, 60))
+            image_type_1.append(preprocessing.image.img_to_array(roi_eyes1))
+\end{lstlisting}
+
+This algorithm parse through all the photos from the "focused" folder. Than each image is transformed into gray scale image (using OpenCV cvtColor function). After that is applied the face\_cascade which is the OpenCV implementation of the face detection using haar cascades. In the case of detecting the face, than the region of interest is computed (roi = image1[y:y+h,x:x+w]) in order to detect the eyes. After, detect the eyes and compute the region of interest (roi\_eyes1 = roi1[ey: ey + eh, ex: ex + ew]), afterwards the image made of the region of interest is resized to 60 $\times$ 60 which is the expected image size of the network model. Finally, the roi image is stored into an array. If the face is not detected, than the algorithm is trying to detect only the eyes to compute the roi (the same as to the above roi\_eyes1) and resize the image to 60X60 and add it to the array.\par
+
+The same output will be in the case of the "not\_focused" folder, with the specification that the "glob" function contains the path to the "not\_focused" folder. In both cases the result is two arrays which contains the pixels from roi eyes. \par
+
+After all images from those two folders were parsed, the resulted arrays will be transformed into numpy arrays and concatenate them into one numpy array which will contain all the data, the concatenation is done row wise. To make the computations more efficient the elements from the concatenated array will be divided to 255. All of these are done using the below lines of code. 
+
+\begin{lstlisting}
+    x_type_focused = np.array(image_type_1)
+    x_type_not_focused = np.array(image_type_2)
+    
+    X = np.concatenate((x_type_focused, x_type_not_focused), axis=0)
+    X = X / 255.
+\end{lstlisting}
+
+The above code is for setting up the array for the data without any labels. So, before training the model, all of the data have to labeled to make sure that the model will not throw any error, as show in the code below. Where the function to\_categorical will produce the output matrix y, which will contain only the labels for the data. In this case 0 stands for the "focus" label an 1 for "not\_focused" label. Also, the concatenation is done in the same way as for the data, row wise.
+
+\begin{lstlisting}
+    y_type_focused = [0 for item in enumerate(x_type_focused)]
+    y_type_not_focused = [1 for item in enumerate(x_type_not_focused)]
+    y = np.concatenate((y_type_focused, y_type_not_focused), axis=0)
+    y = to_categorical(y, num_classes=len(class_name))
+\end{lstlisting}
+
+Finally the next step is to train the model using the fit function provided by the Keras framework.
+
+\vspace{2ex}
+\textbf{Model architecture} \par
+\vspace{2ex}
+
+The architecture of the convolutional neural network is made using Keras. The model is a sequential one, meaning that every layer is executed after the one in front has finished it's job. 
+
+\begin{lstlisting}
+    model = Sequential()
+    model.add(Conv2D(conv_1, kernel_size=(3, 3), activation='relu', input_shape=(60, 60, color_channels)))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(conv_1_drop))
+    
+    model.add(Conv2D(conv_2, kernel_size=(3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(conv_2_drop))
+    
+    model.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+    
+    model.add(Flatten())
+    
+    model.add(Dense(dense_1_n, activation='relu'))
+    model.add(Dropout(dense_1_n_drop))
+    model.add(Dense(dense_2_n, activation='relu'))
+    model.add(Dropout(dense_2_n_drop))
+    model.add(Dense(len(class_name), activation='softmax'))
+    
+    model.compile(optimizer=Adam(lr=lr), loss='binary_crossentropy', metrics=['accuracy'])
+\end{lstlisting}
+
+From this model, the first convolution layer is the one that acts as an input layer which accepts images having the shape 60 $\times$ 60 and the color\_channels is equal to 1. The size of the kernel is equal to a tuple with the following values (3,3), which is setting the width and height of the convolution window, remaining the same for the other convolution layers. Also, the activation function is the same across all of the convolution layers (relu, rectified linear unit). It's formula is:
+
+\begin{equation}
+    y = max(0,x)
+\end{equation}
+
+For the convolution layers, only the filters differs, for the first convolution layer the filter is set to 16, for the second is 32 and for the last one is 128. After each convolution layer there is a maxpooling layer, with the pool\_size= (2,2) meaning that the down sampling is done in two dimensions (vertical, horizontal), followed by a dropout layer which will randomly drop neurons from the convolutional layer. \par
+
+After all these layers, \textbf{flatten} is applied to shrink the dimension to be similar with that of a classical ANN. Afterwards, three fully-connected layers are added to complete the model. First two of them have the 'relu' activation function with 1024 and respectively 512 units. The last one has the 'softmax' activation with 2 units ("focused", "not\_focused"). Also, after every dense layer one dropout layer is added. Finally, the compile function is used, with the following parameters, for optimizer Adam is used and 'binary\_crossentropy' for computing the loss, to make the model ready to be used (see Table \ref{table:modelsummary} for more informations about the model). 
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{||c c c c||} 
+    \hline
+    Layer & Type & Output Shape & Param \# \\ [0.5ex] 
+    \hline\hline
+    conv2d\_1 & Conv2D & (None, 58, 58, 16) & 160 \\ [1ex]
+    \hline
+    max\_pooling2d\_1 & MaxPooling2D & (None, 29, 29, 16) & 0 \\ [1ex]
+    \hline 
+    dropout\_1 & Dropout & (None,29,29,16) & 0 \\ [1ex]
+    \hline
+    conv2d\_2 & Conv2D & (None, 29, 29, 32) & 4640 \\ [1ex]
+    \hline
+    max\_pooling2d\_2 & MaxPooling2D & (None, 14, 14, 32) & 0 \\ [1ex]
+    \hline
+    dropout\_2 & Dropout & (None, 14, 14, 32) & 0 \\ [1ex]
+    \hline
+    conv2d\_3 & Conv2D & (None, 14, 14, 128) & 36992 \\ [1ex]
+    \hline
+    max\_pooling2d\_3 & MaxPooling2D & (None, 7, 7, 128) & 0 \\ [1ex]
+    \hline
+    dropout\_3 & Dropout & (None, 7, 7, 128) & 0 \\ [1ex]
+    \hline
+    flatten\_1 & Flatten & (None, 6272) & 0 \\ [1ex]
+    \hline
+    dense\_1 & Dense & (None, 1024) & 6423552 \\ [1ex]
+    \hline
+    dropout\_4 & Dropout & (None, 1024) & 0 \\ [1ex]
+    \hline
+    dense\_2 & Dense & (None, 512) & 524800 \\ [1ex]
+    \hline
+    dropout\_5 & Dropout & (None, 512) & 0 \\ [1ex]
+    \hline
+    dense\_3 & Dense & (None, 2) & 1026 \\ [1ex]
+    \hline \hline
+    Total params: & 6,991,170 & & \\ 
+    \hline
+    \end{tabular}
+    \caption{The summary of the model}
+    \label{table:modelsummary}
+\end{table}
+
+\vspace{2ex}
+\textbf{Prediction} \par
+\vspace{2ex}
+
+The last part of the focus detector is making predictions. For this process to work, firstly the model has to be trained and saved. Afterwards, the model is imported and loaded, as show in the code below.
+
+\begin{lstlisting}
+   from keras.models import load_model
+   
+   model = load_model('focus_detector_model1.h5')
+\end{lstlisting}
+
+The process of detecting the face and eyes is done in exactly the same way as the algorithm for processing the images, shown at the beginning the Focus Detector implementation. In the case of detecting the face and than the eyes, the region of interest will be computed afterwards it will be resized to be 60X60 and finally the roi will be transformed into arrays of pixels. After the above process, a prediction is made, as shown below.
+
+\begin{lstlisting}
+    roi_predict = cv2.resize(roi_gray1, (60, 60))
+    roi_predict = preprocessing.image.img_to_array(roi_predict)
+    roi_predict = np.expand_dims(roi_predict, axis=0)
+    prediction = model.predict(roi_predict)
+\end{lstlisting}
+
+In the case that the result of prediction is 'not\_focused' than a counter will be incremented, otherwise it will reset its value. The same scenario happens when the face is not detected. Therefore, if one of the counters exceeds a certain threshold, than an alert will be played. The following lines of code shows the implementation of how the alarm is fired and how he counters get incremented.
+
+\begin{lstlisting}
+    if result == 'not_focused':
+        COUNTER_PREDICT += 1
+    else:
+        COUNTER_PREDICT = 0
+        
+    COUNTER_FOCUS += 1
+    if COUNTER_FOCUS >= THRESH_COUNT or COUNTER_PREDICT >= THRESH_PREDICT and SPEED != 0:
+        if not ALARM_ON_FOCUS:
+            ALARM_ON_FOCUS = True
+            t = Thread(target=sound_alarm, args=("alarm.wav",))
+            t.daemon = True
+            t.start()
+        cv2.putText(frame, "FOCUS ALERT!", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+    def sound_alarm(path):
+        playsound.playsound(path)         
+\end{lstlisting}
+
+\subsubsection{Drowsiness Detector}
+
+The \textbf{Drowsiness Detector} is implemented using the following libraries: SciPy, imputils, dlib and OpenCV framework. \par
+
+One of the main parts of this detector is computing the eye aspect ratio which will be used to determine whether the driver will be or not sleepy. For this the code below will compute the proportion of distances between vertical eye landmarks and horizontal eye landmarks.
+
+\begin{lstlisting}
+def eye_aspect_ratio(eye):
+
+    a = dist.euclidean(eye[1], eye[5])
+    b = dist.euclidean(eye[2], eye[4])
+
+    c = dist.euclidean(eye[0], eye[3])
+
+    ear = (a + b) / (2.0 * c)
+    return ear
+\end{lstlisting}
+
+In the case of an open or closed eye the value of the eye aspect ratio will remain relatively constant, but if the eye is closed the value will be much smaller thank of that from an open eye. A rapid decrease will be registered in case of blinking. \par
+
+In order to detect the face and eye landmarks, the dlib is used. After the face is detected is applied a "shape\_predictor" which will return the shape of the face. Lastly, to get the eyes from the face landmarks, simply slice the array with the correct indexes, as shown in the below code snippet. 
+
+\begin{lstlisting}
+def get_face_utils():
+    return dlib.get_frontal_face_detector(), \
+           dlib.shape_predictor("shape_predictor_68_face_landmarks.dat"), \
+           face_utils.FACIAL_LANDMARKS_IDXS["left_eye"], \
+           face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
+
+\end{lstlisting}
+
+By using the above the returned features,the face is detected, than a for loop is used to parse every face to get the coordinates of the eyes. With them the eye aspect ratio will be computed, one for each eye and than made an average. 
+
+\begin{lstlisting}
+rects = detector(gray, 0)
+
+for rect in rects:
+    shape = predictor(gray, rect)
+    shape = face_utils.shape_to_np(shape)
+
+    leftEye = shape[lStart:lEnd]
+    rightEye = shape[rStart:rEnd]
+    leftEAR = eye_aspect_ratio(leftEye)
+    rightEAR = eye_aspect_ratio(rightEye)
+
+    ear = (leftEAR + rightEAR) / 2.0
+\end{lstlisting}
+
+Thus, obtaining the value which will then be compared to a threshold. If it's lower than the threshold for a couple of seconds, then an alarm will be fired to let the driver know he is about to fall asleep. Also, to visualize the result of the computations OpenCv is used. The code snippet below shows the implementation.
+
+\begin{lstlisting}
+leftEyeHull = cv2.convexHull(leftEye)
+rightEyeHull = cv2.convexHull(rightEye)
+cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
+cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+
+if ear < EYE_AR_THRESH:
+    COUNTER += 1
+
+    if COUNTER >= EYE_AR_CONSEC_FRAMES and SPEED != 0:
+        if not ALARM_ON_Drowsiness:
+            ALARM_ON_FOCUS = True
+            ALARM_ON_Drowsiness = True
+            t = Thread(target=sound_alarm, args=("alarm.wav",))
+            t.daemon = True
+            t.start()
+        cv2.putText(frame, "DROWSINESS ALERT!", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+    else:
+        COUNTER = 0
+        ALARM_ON_Drowsiness = False
+         ALARM_ON_FOCUS = False
+\end{lstlisting}
+
+\paragraph{Main Program}
+
+Finally, after showing the implementation of the Focus and Drowsiness detector, in the following it will be showcase what the main program contains and how it works. In it, from the focus detector, predictions and how the alert if fired are implemented (their explanation is made in the Implementation section in Focus Detector part). Also, from the Drowsiness detector, only the eye\_aspect\_ratio and get\_face\_utils (functions described in the above section) are not implemented in the main source file. Moreover, the logic which manipulates the webcam and the speed module is also implemented here,along side with all the counters and thresholds. For the speed module, when the user presses the 'w' key the speed will be increased with 10km/h and decreased with the same amount when 's' is pressed, and when the speed is equal to 0 all the counters are set to 0. This is to simulate a car in motion. Lastly, the key 'q' is used to quit the execution of the program and after that destroy all the instances of the webcam. \par
+
+\begin{lstlisting}
+# variables for the alarm
+ALARM_ON_FOCUS = False
+ALARM_ON_Drowsiness = False
+ALARM_ON_Predict = False
+
+# variables to count the how many times the driver is not focused/tired
+COUNTER_PREDICT = 0
+COUNTER_FOCUS = 0
+COUNTER = 0
+
+# thresholds that signal danger
+THRESH_PREDICT = 20
+THRESH_COUNT = 30
+EYE_AR_THRESH = 0.3
+EYE_AR_CONSEC_FRAMES = 20
+
+SPEED = 0
+class_name = ['focused', 'not_focused']
+result = ''
+model = load_model('focus_detector_model1.h5')
+
+# getting the the face/eye haar cascades and the utils for the face
+detector, predictor, (lStart, lEnd), (rStart, rEnd) = get_face_utils()
+face_cascade, eye_cascade = get_haar_cascades()
+cap = cv2.VideoCapture(0)
+
+while True:
+    ret, frame = cap.read()  # get each frame from the webcam
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # make the image gray
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.5, minNeighbors=5)  # detect the face
+    .... # prediction and drowsiness implementations 
+    cv2.putText(frame, str(SPEED) + " Km/h", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+    if cv2.waitKey(20) & 0xFF == ord('w'):  # simulates when the driver presses on the throttle
+        SPEED += 10
+    elif cv2.waitKey(20) & 0xFF == ord('s') and SPEED > 0:  # simulates when the driver presses on the brake
+        SPEED -= 10
+
+    if SPEED == 0:  # when the speed is 0 reset the counters
+        COUNTER_PREDICT = 0
+        COUNTER_FOCUS = 0
+        COUNTER = 0
+
+    cv2.imshow('frame', frame)
+    if cv2.waitKey(20) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+\end{lstlisting}
+
+When the program is running, a window will appear in which the face and eyes are detected in real time, the speed is shown and whether one of the thresholds are not met a warning text will appear along side an alarm. 
